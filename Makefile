@@ -8,8 +8,27 @@ TOP     := $(CURDIR)/target/rpm
 SRC     := $(NAME)-$(VERSION)
 SPEC    := packaging/fedora/$(NAME).spec
 SPEC_VERSION := $(shell sed -n 's/^Version: *//p' $(SPEC))
+PKGBUILD := packaging/arch/PKGBUILD
+DEB_CHANGELOG := packaging/debian/changelog
+METAINFO := data/app.whatsup_desktop.WhatsUp.metainfo.xml
 
-.PHONY: rpm sources clean-rpm deb install uninstall
+.PHONY: rpm sources clean-rpm check-versions deb install uninstall
+
+# A release sets the same version in Cargo.toml and every package (the newest
+# metainfo <release> and debian/changelog entry included); this refuses any
+# that differ. make rpm runs it, and so does CI.
+check-versions:
+	@status=0; \
+	for entry in "$(SPEC)=$(SPEC_VERSION)" \
+	    "$(PKGBUILD)=$$(sed -n 's/^pkgver=//p' $(PKGBUILD))" \
+	    "$(DEB_CHANGELOG)=$$(sed -n '1s/^[^(]*(\([^)]*\)).*/\1/p' $(DEB_CHANGELOG))" \
+	    "$(METAINFO)=$$(grep -o -m1 '<release version="[^"]*"' $(METAINFO) | cut -d'"' -f2)"; do \
+	    file=$${entry%%=*}; version=$${entry#*=}; \
+	    if [ "$$version" != "$(VERSION)" ]; then \
+	        echo "Cargo.toml ($(VERSION)) and $$file ($$version) differ"; status=1; \
+	    fi; \
+	done; \
+	exit $$status
 
 rpm: sources
 	rpmbuild -ba --define "_topdir $(TOP)" $(SPEC)
@@ -17,9 +36,7 @@ rpm: sources
 
 # The source archive is the committed code (git archive), so a release's
 # tarball matches its tag exactly; commit before building.
-sources: clean-rpm
-	@test "$(VERSION)" = "$(SPEC_VERSION)" || \
-	    { echo "Cargo.toml ($(VERSION)) and $(SPEC) ($(SPEC_VERSION)) differ"; exit 1; }
+sources: check-versions clean-rpm
 	mkdir -p $(TOP)/SOURCES $(TOP)/vendor-tmp
 	git archive --format=tar.gz --prefix=$(SRC)/ -o $(TOP)/SOURCES/$(SRC).tar.gz HEAD
 	cargo vendor --locked --versioned-dirs $(TOP)/vendor-tmp/vendor > /dev/null

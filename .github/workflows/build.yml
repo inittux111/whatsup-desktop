@@ -6,9 +6,13 @@
 # 1.8 for the default adw-shortcuts feature, GTK 4.18 and WebKitGTK 6.0 2.50,
 # the minimums in Cargo.toml), which the Ubuntu runners don't.
 #
-# Linting and building are separate jobs so each always reports: a clippy
-# warning can't hide whether the tests pass, and the reverse. Actions are
-# pinned to exact commits so a moved tag can't change what runs.
+# Each target gets the same checks: clippy, tests, and a build of its package
+# (make rpm, make deb) with the package's own checks (desktop file and
+# metainfo validation in the spec's %check). Formatting and the version check
+# don't depend on the system, so they run once. Linting and building are
+# separate jobs or steps that each always report: a clippy warning can't hide
+# whether the tests pass, and the reverse. Actions are pinned to exact
+# commits so a moved tag can't change what runs.
 name: Build and test
 
 on:
@@ -34,17 +38,22 @@ jobs:
       # git first: the base Fedora image has none, and checkout needs it.
       - name: Install build dependencies
         run: |
-          dnf install -y git cargo clippy rustfmt gcc pkgconf-pkg-config \
+          dnf install -y git make cargo clippy rustfmt gcc pkgconf-pkg-config \
             libadwaita-devel webkitgtk6.0-devel
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Versions match
+        run: make check-versions
       - name: Formatting
+        if: ${{ !cancelled() }}
         run: cargo fmt --check
       - name: Clippy
+        if: ${{ !cancelled() }}
         run: cargo clippy --all-targets -- -D warnings
       # The Debian build uses --no-default-features (libadwaita 1.7 shortcuts
       # fallback). The feature gate exercises that path here too, so it can't
       # rot even though this container has libadwaita 1.8.
       - name: Clippy (no default features)
+        if: ${{ !cancelled() }}
         run: cargo clippy --all-targets --no-default-features -- -D warnings
 
   build:
@@ -53,24 +62,39 @@ jobs:
     steps:
       - name: Install build dependencies
         run: |
-          dnf install -y git cargo gcc pkgconf-pkg-config \
-            libadwaita-devel webkitgtk6.0-devel
+          dnf install -y git make cargo rust gcc pkgconf-pkg-config \
+            libadwaita-devel webkitgtk6.0-devel desktop-file-utils \
+            libappstream-glib rpm-build
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Tests
         run: cargo test
       - name: Build
         run: cargo build
+      # make rpm archives the commit with git, which refuses a checkout owned
+      # by another user (the runner's) unless it's marked safe. The RPM's own
+      # %check runs the tests again in release mode and validates the desktop
+      # file and metainfo.
+      - name: Build the RPM
+        if: ${{ !cancelled() }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          make rpm
 
   # Debian stable has older libraries than Fedora (libadwaita 1.7, GTK 4.18),
   # so only a build against them shows the --no-default-features path really
-  # compiles there. It uses packaging/debian/Containerfile, the same image as
-  # a local Debian build, and `make deb`, which also runs the tests
-  # (debian/rules) and checks the packaging files.
+  # compiles and lints clean there. It uses packaging/debian/Containerfile, the
+  # same image as a local Debian build, and `make deb`, which also runs the
+  # tests (debian/rules) and checks the packaging files.
   debian:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build the Debian container
         run: docker build -t whatsup-desktop-deb packaging/debian
+      - name: Clippy
+        run: >-
+          docker run --rm -v "$PWD":/src -w /src whatsup-desktop-deb
+          cargo clippy --all-targets --no-default-features -- -D warnings
       - name: Test and build the .deb
+        if: ${{ !cancelled() }}
         run: docker run --rm -v "$PWD":/src -w /src whatsup-desktop-deb make deb

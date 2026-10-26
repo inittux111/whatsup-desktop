@@ -11,7 +11,8 @@
 # The Rust toolchain comes from rustup, not Debian's rustc: the gtk-rs crates
 # need a newer rustc than Debian stable packages, and the toolchain used to
 # compile has no bearing on the .deb's runtime dependencies, which are the
-# system GTK4, libadwaita 1.7 and WebKitGTK 6.0 this image installs.
+# system GTK4, libadwaita 1.7 and WebKitGTK 6.0 this image installs. Clippy is
+# included so CI lints against those same libraries.
 FROM docker.io/library/debian:trixie-slim
 
 ENV RUSTUP_HOME=/opt/rust/rustup \
@@ -40,4 +41,5 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
       | sh -s -- -y --no-modify-path --profile minimal --default-toolchain stable \
+           --component clippy \
  && chmod -R a+rX /opt/rust
