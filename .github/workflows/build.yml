@@ -89,12 +89,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Docker looks for a Dockerfile unless told otherwise (podman also reads
+      # a Containerfile on its own).
       - name: Build the Debian container
-        run: docker build -t whatsup-desktop-deb packaging/debian
+        id: image
+        run: >-
+          docker build -t whatsup-desktop-deb
+          -f packaging/debian/Containerfile packaging/debian
       - name: Clippy
         run: >-
           docker run --rm -v "$PWD":/src -w /src whatsup-desktop-deb
           cargo clippy --all-targets --no-default-features -- -D warnings
       - name: Test and build the .deb
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.image.outcome == 'success' }}
         run: docker run --rm -v "$PWD":/src -w /src whatsup-desktop-deb make deb
