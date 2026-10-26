@@ -1,8 +1,10 @@
-# Builds and checks WhatsUp on Fedora 44, the officially supported target, on
-# every push to master and every pull request, using the same libraries as the
-# development toolbox. Running in a Fedora 44 container (not the Ubuntu runner)
-# is deliberate: it has the GNOME versions WhatsUp pins (libadwaita 1.8,
-# GTK 4.20, WebKitGTK 6.0 2.50), which the Ubuntu runners don't.
+# Builds and checks WhatsUp on Fedora 44, the primary target, on every push to
+# master and every pull request, using the same libraries as the development
+# toolbox, and builds the Debian stable package the way a release does.
+# Running in Fedora and Debian containers (not the Ubuntu runner) is
+# deliberate: they meet the GNOME versions WhatsUp needs (libadwaita 1.7, or
+# 1.8 for the default adw-shortcuts feature, GTK 4.18 and WebKitGTK 6.0 2.50,
+# the minimums in Cargo.toml), which the Ubuntu runners don't.
 #
 # Linting and building are separate jobs so each always reports: a clippy
 # warning can't hide whether the tests pass, and the reverse. Actions are
@@ -58,3 +60,17 @@ jobs:
         run: cargo test
       - name: Build
         run: cargo build
+
+  # Debian stable has older libraries than Fedora (libadwaita 1.7, GTK 4.18),
+  # so only a build against them shows the --no-default-features path really
+  # compiles there. It uses packaging/debian/Containerfile, the same image as
+  # a local Debian build, and `make deb`, which also runs the tests
+  # (debian/rules) and checks the packaging files.
+  debian:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build the Debian container
+        run: docker build -t whatsup-desktop-deb packaging/debian
+      - name: Test and build the .deb
+        run: docker run --rm -v "$PWD":/src -w /src whatsup-desktop-deb make deb
