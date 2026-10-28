@@ -69,10 +69,15 @@ toolbox create whatsup-desktop --image registry.fedoraproject.org/fedora-toolbox
 toolbox run -c whatsup-desktop sudo dnf install -y cargo clippy rustfmt libadwaita-devel \
     webkitgtk6.0-devel blueprint-compiler rpm-build google-noto-color-emoji-fonts \
     desktop-file-utils libappstream-glib make hunspell-en-US
-toolbox run -c whatsup-desktop cargo install cargo-audit                             # dependency security checks
+toolbox run -c whatsup-desktop sudo sh -c 'mkdir -p /opt/cargo && chown "$SUDO_USER": /opt/cargo &&
+    printf "#!/bin/sh\nexport CARGO_HOME=/opt/cargo\nexec /usr/bin/cargo \"\$@\"\n" > /usr/local/bin/cargo &&
+    chmod 755 /usr/local/bin/cargo'                                                 # crates stay in the container
+toolbox run -c whatsup-desktop cargo install --locked cargo-audit                    # dependency security checks
 ```
 
 The toolbox has its own fonts: without the emoji font, emoji show as white outlines there but not on the host. Toolbox shares the home directory and the Wayland session, so the repo is at the same path inside and `cargo run` opens the window on the host desktop.
+
+No crates or cargo tools on the host either: since the home directory is shared, cargo's default `~/.cargo` would land on the host. The `/usr/local/bin/cargo` wrapper above (ahead of `/usr/bin` on the toolbox's `PATH`, also for `toolbox run` and `make rpm`) points `CARGO_HOME` at the container's own `/opt/cargo` (registry, `cargo install`ed tools, cargo-audit's advisory database). After recreating the toolbox, set the wrapper up again before running cargo; `~/.cargo` should never exist on the host. The Debian container keeps its own (`/opt/rust/cargo`, and `debian/cargo` during the build).
 
 ## Commands
 

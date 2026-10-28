@@ -156,6 +156,10 @@ toolbox create whatsup-desktop --image registry.fedoraproject.org/fedora-toolbox
 toolbox run -c whatsup-desktop sudo dnf install -y cargo clippy rustfmt libadwaita-devel \
     webkitgtk6.0-devel rpm-build google-noto-color-emoji-fonts \
     desktop-file-utils libappstream-glib make hunspell-en-US
+# Toolbox shares your home folder: keep cargo's crates in the container, not in ~/.cargo
+toolbox run -c whatsup-desktop sudo sh -c 'mkdir -p /opt/cargo && chown "$SUDO_USER": /opt/cargo &&
+    printf "#!/bin/sh\nexport CARGO_HOME=/opt/cargo\nexec /usr/bin/cargo \"\$@\"\n" > /usr/local/bin/cargo &&
+    chmod 755 /usr/local/bin/cargo'
 
 toolbox run -c whatsup-desktop cargo run       # run the app
 toolbox run -c whatsup-desktop cargo test      # run the tests
