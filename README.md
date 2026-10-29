@@ -7,6 +7,19 @@ Rust for speed and a light footprint. It was inspired by
 [ZapZap](https://github.com/rafatosta/zapzap), another unofficial
 WhatsApp client, written in Python.
 
+## Use at your own risk
+
+whatsup-desktop is an unofficial WhatsApp client for Linux, built as a
+personal-use project. It isn't affiliated with, endorsed by or supported by
+WhatsApp or Meta; WhatsApp is a trademark of WhatsApp LLC.
+
+- It shows WhatsApp's own web client and doesn't use any unofficial protocol,
+  but WhatsApp's terms and how they enforce them are up to WhatsApp. Nothing
+  guarantees your account won't be restricted.
+- WhatsApp can change WhatsApp Web at any time, and some features may stop
+  working until whatsup-desktop is updated.
+- It comes with no warranty, as the GPL says: you use it at your own risk.
+
 ## Features
 
 - **Multiple accounts**, each with its own login; switch between them from the
@@ -28,19 +41,6 @@ WhatsApp client, written in Python.
   dark, whatever GNOME uses
 - Remembers its window size, and shows the unread count on the app icon in
   docks that support it
-
-## Use at your own risk
-
-whatsup-desktop is an unofficial WhatsApp client for Linux, built as a
-personal-use project. It isn't affiliated with, endorsed by or supported by
-WhatsApp or Meta; WhatsApp is a trademark of WhatsApp LLC.
-
-- It shows WhatsApp's own web client and doesn't use any unofficial protocol,
-  but WhatsApp's terms and how they enforce them are up to WhatsApp. Nothing
-  guarantees your account won't be restricted.
-- WhatsApp can change WhatsApp Web at any time, and some features may stop
-  working until whatsup-desktop is updated.
-- It comes with no warranty, as the GPL says: you use it at your own risk.
 
 ## Installing
 
