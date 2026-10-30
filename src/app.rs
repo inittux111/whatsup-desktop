@@ -6,7 +6,7 @@ use adw::prelude::*;
 use gtk::{gio, glib};
 
 use crate::settings::{self, Settings};
-use crate::{background, downloads, notifications, paths, window};
+use crate::{background, clipboard, downloads, notifications, paths, window};
 
 pub const APP_ID: &str = "app.whatsup_desktop.WhatsUp";
 pub const APP_NAME: &str = "WhatsUp";
@@ -62,6 +62,7 @@ fn activate(app: &adw::Application) {
     background::attach(app, &main);
     notifications::attach(app, &main);
     downloads::attach(&main);
+    clipboard::attach(&main);
     if !START_HIDDEN.replace(false) {
         main.window.present();
     }

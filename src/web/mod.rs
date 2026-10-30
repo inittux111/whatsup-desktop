@@ -1,6 +1,7 @@
 //! The web view that runs WhatsApp Web, locked down to WhatsApp's own site.
 
 mod audio;
+pub mod clipboard;
 mod nvidia;
 mod permissions;
 mod policy;

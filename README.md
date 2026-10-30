@@ -32,6 +32,9 @@ WhatsApp or Meta; WhatsApp is a trademark of WhatsApp LLC.
   chat; message previews can be turned off
 - **Downloads** to a folder of your choice, never overwriting a file, or asks
   where to save each one
+- **Copy and paste pictures and files**: copy a picture from the full-size
+  viewer (right-click → Copy Image) and paste it into another chat or app;
+  paste screenshots, or files copied in Files, straight into a chat
 - **Zoom**, **spell checking** in the languages you pick, and **keyboard
   shortcuts** you can change
 - **Follows your GNOME theme**: WhatsApp itself takes its colours from your

@@ -5,6 +5,7 @@ mod app;
 mod appearance;
 mod background;
 mod badge;
+mod clipboard;
 mod downloads;
 mod notifications;
 mod paths;
