@@ -1,6 +1,11 @@
 # Checks the Rust dependencies against the RustSec advisory database every
-# week and whenever they change, and opens an issue for each advisory found.
-# Actions are pinned to exact commits so a moved tag can't change what runs.
+# week and whenever they change. A scheduled run that finds an advisory also
+# opens an issue (once: it isn't repeated while one is still open).
+#
+# cargo-audit runs directly, at a pinned version, instead of through the
+# rustsec/audit-check action, whose last release (v2.0.0, 2024) still runs on
+# Node 20. Actions are pinned to exact commits so a moved tag can't change
+# what runs.
 name: Security audit
 
 on:
@@ -21,9 +26,24 @@ jobs:
     permissions:
       contents: read
       issues: write
-      checks: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install cargo-audit
+        run: cargo install --locked cargo-audit --version 0.22.2
+      - name: Audit
+        id: audit
+        run: |
+          set -o pipefail
+          cargo audit 2>&1 | tee audit.txt
+      - name: Open an issue
+        if: ${{ failure() && steps.audit.outcome == 'failure' && github.event_name == 'schedule' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          title="Security audit found advisories"
+          open=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq length)
+          if [ "$open" = 0 ]; then
+            { echo "The weekly \`cargo audit\` run failed: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+              echo; echo '```'; tail -c 60000 audit.txt; echo '```'; } > body.md
+            gh issue create --title "$title" --body-file body.md
+          fi

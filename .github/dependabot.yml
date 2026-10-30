@@ -7,7 +7,7 @@
 #    versions before merging.
 #  - github-actions: the actions used in the workflows, which are pinned to
 #    exact commits. This proposes the new commit when an action releases, so
-#    the pins (e.g. rustsec/audit-check) don't silently fall behind.
+#    the pins (e.g. actions/checkout) don't silently fall behind.
 version: 2
 updates:
   - package-ecosystem: cargo
