@@ -2,7 +2,7 @@
 %global debug_package %{nil}
 
 Name:           whatsup-desktop
-Version:        1.3.0
+Version:        1.3.1
 Release:        1%{?dist}
 Summary:        WhatsApp Web for GNOME
 License:        GPL-3.0-or-later
@@ -63,6 +63,9 @@ make install DESTDIR=%{buildroot} PREFIX=%{_prefix}
 %{_datadir}/icons/hicolor/scalable/apps/app.whatsup_desktop.WhatsUp-tray-unread.svg
 
 %changelog
+* Fri Oct 30 2026 Maarten van der Rijst <claude@feedmebits.nl> - 1.3.1-1
+- Fix pasting screenshots and copied images into a chat on Debian stable
+
 * Fri Oct 30 2026 Maarten van der Rijst <claude@feedmebits.nl> - 1.3.0-1
 - Copy a picture from the picture viewer (right-click, Copy Image) and
   paste it into another chat or app
