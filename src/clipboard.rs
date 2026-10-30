@@ -1,8 +1,9 @@
 //! Copying images out of chats and pasting files into them: Copy Image in
 //! the page's right-click menu puts the picture itself on the clipboard, and
-//! pasting files copied in a file manager attaches them, as in a browser.
-//! Pasting image data (a screenshot, an image copied in another app) needs
-//! nothing extra: WebKit already hands it to the page.
+//! pasting files or image data (a screenshot, an image copied in another app)
+//! attaches them, as in a browser. Older WebKitGTK (Debian stable's 2.54.0)
+//! leaves pasted images out of the paste event, so images take the same route
+//! as files on every system.
 
 use std::rc::Rc;
 
@@ -14,13 +15,16 @@ use crate::accounts::Session;
 use crate::web::clipboard::{self, MAX_BYTES, Pasted};
 use crate::window::Main;
 
+/// The image formats pasted as they are, best first.
+const IMAGE_TYPES: &[&str] = &["image/png", "image/jpeg", "image/gif", "image/webp"];
+
 pub fn attach(main: &Main) {
     main.accounts.on_session(glib::clone!(
         #[weak(rename_to = toasts)]
         main.toasts,
         move |session| {
             offer_copy_image(session, &toasts);
-            paste_files_on_ctrl_v(session, &toasts);
+            paste_on_ctrl_v(session, &toasts);
         }
     ));
 }
@@ -76,9 +80,10 @@ fn offer_copy_image(session: &Rc<Session>, toasts: &adw::ToastOverlay) {
     });
 }
 
-/// Ctrl+V (or Shift+Insert) with files on the clipboard attaches them: WebKit
-/// would paste only their paths. Anything else pastes as usual.
-fn paste_files_on_ctrl_v(session: &Rc<Session>, toasts: &adw::ToastOverlay) {
+/// Ctrl+V (or Shift+Insert) with files or an image on the clipboard attaches
+/// them: WebKit would paste only the files' paths, and not every version hands
+/// images to the page. Anything else pastes as usual.
+fn paste_on_ctrl_v(session: &Rc<Session>, toasts: &adw::ToastOverlay) {
     let view = &session.view;
     let keys = gtk::EventControllerKey::new();
     keys.set_propagation_phase(gtk::PropagationPhase::Capture);
@@ -92,10 +97,16 @@ fn paste_files_on_ctrl_v(session: &Rc<Session>, toasts: &adw::ToastOverlay) {
         move |_, key, _, state| {
             let clipboard = view.clipboard();
             let mime_types = clipboard.formats().mime_types();
-            if !is_paste(key, state) || !holds_files_only(&mime_types) {
+            if !is_paste(key, state) {
                 return glib::Propagation::Proceed;
             }
-            glib::spawn_future_local(paste_files(view, clipboard, toasts));
+            if holds_files_only(&mime_types) {
+                glib::spawn_future_local(paste_files(view, clipboard, toasts));
+            } else if holds_image(&mime_types) {
+                glib::spawn_future_local(paste_image(view, clipboard, toasts));
+            } else {
+                return glib::Propagation::Proceed;
+            }
             glib::Propagation::Stop
         }
     ));
@@ -112,12 +123,79 @@ fn is_paste(key: gdk::Key, state: gdk::ModifierType) -> bool {
         || (modifiers == gdk::ModifierType::SHIFT_MASK && key == gdk::Key::Insert)
 }
 
-/// Whether the clipboard holds a list of files and no image data, which
-/// WebKit pastes well by itself.
+/// Whether the clipboard holds a list of files and no image data.
 fn holds_files_only(mime_types: &[glib::GString]) -> bool {
     let files = mime_types.iter().any(|m| m == "text/uri-list");
     let image = mime_types.iter().any(|m| m.starts_with("image/"));
     files && !image
+}
+
+/// Whether the clipboard holds an image in a format WhatsApp takes, and no
+/// text: a selection copied from a web page or a document offers a picture of
+/// itself too, but pastes as text.
+fn holds_image(mime_types: &[glib::GString]) -> bool {
+    let image = mime_types.iter().any(|m| IMAGE_TYPES.contains(&m.as_str()));
+    let text = mime_types.iter().any(|m| m.starts_with("text/plain"));
+    image && !text
+}
+
+async fn paste_image(view: webkit::WebView, clipboard: gdk::Clipboard, toasts: adw::ToastOverlay) {
+    let message = match read_image(&clipboard).await {
+        Ok(image) => match clipboard::paste_files(&view, vec![image]).await {
+            Ok(()) => return,
+            Err(err) => {
+                glib::g_warning!("whatsup-desktop", "cannot paste an image: {err}");
+                "Couldn’t paste the image"
+            }
+        },
+        Err(message) => message,
+    };
+    toasts.add_toast(adw::Toast::new(message));
+}
+
+/// The image on the clipboard, as the owner stored it: nothing is decoded on
+/// the main thread, and an animated GIF stays animated. The error is a message
+/// for the user.
+async fn read_image(clipboard: &gdk::Clipboard) -> Result<Pasted, &'static str> {
+    let (stream, mime_type) = clipboard
+        .read_future(IMAGE_TYPES, glib::Priority::DEFAULT)
+        .await
+        .map_err(|_| "Couldn’t paste the image")?;
+    let contents = read_up_to(&stream, MAX_BYTES)
+        .await
+        .map_err(|_| "Couldn’t paste the image")?;
+    if contents.len() > MAX_BYTES {
+        return Err("Too large to paste: attach files over 100 MB instead");
+    }
+    if contents.is_empty() {
+        return Err("Couldn’t paste the image");
+    }
+    Ok(Pasted {
+        name: image_name(&mime_type),
+        mime_type: mime_type.to_string(),
+        contents: glib::Bytes::from_owned(contents),
+    })
+}
+
+/// The name a pasted image goes by, as browsers name them.
+fn image_name(mime_type: &str) -> String {
+    let extension = mime_type.strip_prefix("image/").unwrap_or("png");
+    format!("image.{extension}")
+}
+
+/// `stream`'s contents, stopping once they're past `limit`.
+async fn read_up_to(stream: &gio::InputStream, limit: usize) -> Result<Vec<u8>, glib::Error> {
+    let mut contents = Vec::new();
+    while contents.len() <= limit {
+        let chunk = stream
+            .read_bytes_future(64 * 1024, glib::Priority::DEFAULT)
+            .await?;
+        if chunk.is_empty() {
+            break;
+        }
+        contents.extend_from_slice(&chunk);
+    }
+    Ok(contents)
 }
 
 async fn paste_files(view: webkit::WebView, clipboard: gdk::Clipboard, toasts: adw::ToastOverlay) {
@@ -153,16 +231,7 @@ async fn copied_uris(clipboard: &gdk::Clipboard) -> String {
     else {
         return String::new();
     };
-    let mut list = Vec::new();
-    while list.len() <= MAX_LIST {
-        match stream
-            .read_bytes_future(64 * 1024, glib::Priority::DEFAULT)
-            .await
-        {
-            Ok(chunk) if !chunk.is_empty() => list.extend_from_slice(&chunk),
-            _ => break,
-        }
-    }
+    let list = read_up_to(&stream, MAX_LIST).await.unwrap_or_default();
     String::from_utf8(list).unwrap_or_default()
 }
 
@@ -269,7 +338,7 @@ mod tests {
             "text/uri-list",
             "text/plain;charset=utf-8",
         ])));
-        // A screenshot, or an image copied in a browser: WebKit pastes these.
+        // A screenshot, or an image copied in a browser.
         assert!(!holds_files_only(&types(&["image/png"])));
         assert!(!holds_files_only(&types(&[
             "text/html",
@@ -278,6 +347,41 @@ mod tests {
         ])));
         // Plain text.
         assert!(!holds_files_only(&types(&["text/plain;charset=utf-8"])));
+    }
+
+    #[test]
+    fn images_paste_unless_text_comes_with_them() {
+        let types = |list: &[&str]| -> Vec<glib::GString> {
+            list.iter().copied().map(glib::GString::from).collect()
+        };
+        // A screenshot from GTK, offered in every format it can write.
+        assert!(holds_image(&types(&[
+            "image/png",
+            "image/jpeg",
+            "image/bmp",
+            "image/tiff",
+        ])));
+        // An image copied in a browser.
+        assert!(holds_image(&types(&[
+            "text/html",
+            "text/uri-list",
+            "image/png",
+        ])));
+        // A selection copied from a document.
+        assert!(!holds_image(&types(&[
+            "text/plain;charset=utf-8",
+            "text/html",
+            "image/png",
+        ])));
+        // Only formats WhatsApp doesn't take stay with WebKit.
+        assert!(!holds_image(&types(&["image/bmp"])));
+        assert!(!holds_image(&types(&["text/uri-list"])));
+    }
+
+    #[test]
+    fn names_pasted_images_by_type() {
+        assert_eq!(image_name("image/png"), "image.png");
+        assert_eq!(image_name("image/jpeg"), "image.jpeg");
     }
 
     #[test]
