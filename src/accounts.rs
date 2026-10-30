@@ -130,8 +130,7 @@ impl Accounts {
         let Some(index) = sessions.iter().position(|s| s.id == current.id) else {
             return;
         };
-        let next = (index as isize + step).rem_euclid(sessions.len() as isize) as usize;
-        self.show(&sessions[next].id);
+        self.show(&sessions[cycled(index, step, sessions.len())].id);
     }
 
     pub fn total_unread(&self) -> u32 {
@@ -152,22 +151,27 @@ impl Accounts {
     }
 
     fn sync_now(&self, values: &Values) {
-        let removed: Vec<Rc<Session>> = self
+        let open: Vec<Account> = self
             .sessions()
-            .into_iter()
-            .filter(|s| values.accounts.iter().all(|a| a.id != s.id))
+            .iter()
+            .map(|s| Account {
+                id: s.id.clone(),
+                name: s.name(),
+            })
             .collect();
-        for session in removed {
-            self.close(&session);
-        }
-        for account in &values.accounts {
-            match self.find(&account.id) {
-                Some(session) if session.name() != account.name => {
-                    session.page.set_title(Some(&account.name));
-                }
-                Some(_) => {}
-                None => self.open(account),
+        let changes = plan(&open, &values.accounts);
+        for id in changes.close {
+            if let Some(session) = self.find(id) {
+                self.close(&session);
             }
+        }
+        for account in changes.rename {
+            if let Some(session) = self.find(&account.id) {
+                session.page.set_title(Some(&account.name));
+            }
+        }
+        for account in changes.open {
+            self.open(account);
         }
         if self.0.scripts.replace(values.custom_scripts) != values.custom_scripts {
             self.reload_customizations();
@@ -276,5 +280,83 @@ impl Accounts {
         for listener in listeners {
             listener(total);
         }
+    }
+}
+
+/// The index `step` places after `index` in a list of `len`, wrapping around.
+fn cycled(index: usize, step: isize, len: usize) -> usize {
+    (index as isize + step).rem_euclid(len as isize) as usize
+}
+
+/// What `sync` changes to go from the `open` pages to the `wanted` accounts.
+#[derive(Debug, Default, PartialEq)]
+struct Plan<'a> {
+    /// Pages whose account was removed; closing one deletes its data.
+    close: Vec<&'a str>,
+    rename: Vec<&'a Account>,
+    open: Vec<&'a Account>,
+}
+
+fn plan<'a>(open: &'a [Account], wanted: &'a [Account]) -> Plan<'a> {
+    let mut changes = Plan::default();
+    for page in open {
+        if wanted.iter().all(|a| a.id != page.id) {
+            changes.close.push(&page.id);
+        }
+    }
+    for account in wanted {
+        match open.iter().find(|page| page.id == account.id) {
+            Some(page) if page.name != account.name => changes.rename.push(account),
+            Some(_) => {}
+            None => changes.open.push(account),
+        }
+    }
+    changes
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn account(id: &str, name: &str) -> Account {
+        Account {
+            id: id.into(),
+            name: name.into(),
+        }
+    }
+
+    #[test]
+    fn cycling_wraps_both_ways() {
+        assert_eq!(cycled(0, 1, 3), 1);
+        assert_eq!(cycled(2, 1, 3), 0);
+        assert_eq!(cycled(0, -1, 3), 2);
+        assert_eq!(cycled(0, 1, 1), 0);
+    }
+
+    #[test]
+    fn unchanged_accounts_change_nothing() {
+        let accounts = [account("default", "WhatsApp"), account("work", "Work")];
+        assert_eq!(plan(&accounts, &accounts), Plan::default());
+    }
+
+    #[test]
+    fn opens_renames_and_closes() {
+        let open = [account("default", "WhatsApp"), account("work", "Work")];
+        let wanted = [account("default", "Home"), account("club", "Club")];
+        let changes = plan(&open, &wanted);
+        assert_eq!(changes.close, ["work"]);
+        assert_eq!(changes.rename, [&wanted[0]]);
+        assert_eq!(changes.open, [&wanted[1]]);
+    }
+
+    #[test]
+    fn closes_only_removed_accounts() {
+        // Closing deletes an account's data, so a rename or a reorder must
+        // never close anything.
+        let open = [account("default", "WhatsApp"), account("work", "Work")];
+        let wanted = [account("work", "Job"), account("default", "WhatsApp")];
+        assert!(plan(&open, &wanted).close.is_empty());
+        assert_eq!(plan(&open, &[]).close, ["default", "work"]);
+        assert!(plan(&[], &open).close.is_empty());
     }
 }

@@ -167,12 +167,27 @@ fn announce_saved(download: &webkit::Download, toasts: &adw::ToastOverlay) {
 
 /// The saved file's name, for messages to the user.
 fn name_of(download: &webkit::Download) -> String {
-    download
-        .destination()
-        .and_then(|path| {
-            Path::new(path.as_str())
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-        })
-        .unwrap_or_else(|| "file".to_owned())
+    display_name(download.destination().as_deref())
+}
+
+/// The file name in `destination`, or "file" when there's none.
+fn display_name(destination: Option<&str>) -> String {
+    destination
+        .and_then(|path| Path::new(path).file_name())
+        .map_or_else(|| "file".to_owned(), |n| n.to_string_lossy().into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn names_the_saved_file() {
+        assert_eq!(
+            display_name(Some("/home/user/Downloads/photo (1).jpg")),
+            "photo (1).jpg"
+        );
+        assert_eq!(display_name(Some("/")), "file");
+        assert_eq!(display_name(None), "file");
+    }
 }

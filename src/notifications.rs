@@ -79,21 +79,15 @@ fn show(
         return;
     }
     let id = format!("message-{}-{}", session.id, notification.id());
-    // Without previews, the notification doesn't say who wrote or what.
-    let mut title = match notification.title() {
-        Some(title) if values.notification_previews => title.to_string(),
-        _ => "New message".to_owned(),
-    };
-    if accounts.several() {
-        title = format!("{title} ({})", session.name());
-    }
+    let account = accounts.several().then(|| session.name());
+    let (title, body) = content(
+        notification.title().as_deref(),
+        notification.body().as_deref(),
+        values.notification_previews,
+        account.as_deref(),
+    );
     let desktop = gio::Notification::new(&title);
-    if let Some(body) = notification
-        .body()
-        .filter(|body| values.notification_previews && !body.is_empty())
-    {
-        desktop.set_body(Some(&body));
-    }
+    desktop.set_body(body.as_deref());
     desktop.set_category(Some("im.received"));
     desktop
         .set_default_action_and_target_value(&format!("app.{OPEN_ACTION}"), Some(&id.to_variant()));
@@ -114,4 +108,65 @@ fn show(
         .borrow_mut()
         .insert(id.clone(), (session.id.clone(), notification.clone()));
     app.send_notification(Some(&id), &desktop);
+}
+
+/// The desktop notification's title and body for WhatsApp's `title` and
+/// `body`. Without `previews`, it doesn't say who wrote or what. `account`
+/// names the account when there are several.
+fn content(
+    title: Option<&str>,
+    body: Option<&str>,
+    previews: bool,
+    account: Option<&str>,
+) -> (String, Option<String>) {
+    let mut title = match title {
+        Some(title) if previews => title.to_owned(),
+        _ => "New message".to_owned(),
+    };
+    if let Some(account) = account {
+        title = format!("{title} ({account})");
+    }
+    let body = body.filter(|body| previews && !body.is_empty());
+    (title, body.map(str::to_owned))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn previews_show_sender_and_message() {
+        assert_eq!(
+            content(Some("Anna"), Some("Hi!"), true, None),
+            ("Anna".to_owned(), Some("Hi!".to_owned()))
+        );
+    }
+
+    #[test]
+    fn without_previews_nothing_leaks() {
+        assert_eq!(
+            content(Some("Anna"), Some("Hi!"), false, None),
+            ("New message".to_owned(), None)
+        );
+    }
+
+    #[test]
+    fn several_accounts_name_the_account() {
+        assert_eq!(
+            content(Some("Anna"), None, true, Some("Work")).0,
+            "Anna (Work)"
+        );
+        assert_eq!(
+            content(Some("Anna"), Some("Hi!"), false, Some("Work")),
+            ("New message (Work)".to_owned(), None)
+        );
+    }
+
+    #[test]
+    fn missing_or_empty_parts_fall_back() {
+        assert_eq!(
+            content(None, Some(""), true, None),
+            ("New message".to_owned(), None)
+        );
+    }
 }

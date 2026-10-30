@@ -74,18 +74,20 @@ fn decide_response(view: &webkit::WebView, decision: &webkit::ResponsePolicyDeci
 
 /// Whether `uri` may be the app's main page: WhatsApp Web over HTTPS.
 pub fn may_load_inside(uri: &str) -> bool {
-    if uri == "about:blank" {
-        return true;
-    }
+    uri == "about:blank" || is_whatsapp_web(uri)
+}
+
+/// Whether `uri` is WhatsApp Web itself over HTTPS, the only page given
+/// permissions (an empty `about:blank` page isn't).
+pub fn is_whatsapp_web(uri: &str) -> bool {
     https_host(uri).is_some_and(|host| host == WHATSAPP_HOST)
 }
 
 /// Whether `uri` is a file WhatsApp Web made in the page, such as a photo
 /// the user saves: `blob:https://web.whatsapp.com/<id>`.
-fn is_whatsapp_blob(uri: &str) -> bool {
-    uri.strip_prefix("blob:").is_some_and(|inner| {
-        !inner.starts_with("blob:") && may_load_inside(inner) && inner != "about:blank"
-    })
+pub fn is_whatsapp_blob(uri: &str) -> bool {
+    uri.strip_prefix("blob:")
+        .is_some_and(|inner| !inner.starts_with("blob:") && is_whatsapp_web(inner))
 }
 
 /// Whether `uri` is on one of WhatsApp's own domains, over HTTPS.
@@ -134,6 +136,15 @@ mod tests {
         ));
         assert!(!may_load_inside("file:///etc/passwd"));
         assert!(!may_load_inside("not a uri"));
+    }
+
+    #[test]
+    fn whatsapp_web_is_only_the_https_site() {
+        assert!(is_whatsapp_web("https://web.whatsapp.com/"));
+        assert!(!is_whatsapp_web("about:blank"));
+        assert!(!is_whatsapp_web("http://web.whatsapp.com/"));
+        assert!(!is_whatsapp_web("https://user@web.whatsapp.com/"));
+        assert!(!is_whatsapp_web("https://flows.whatsapp.net/"));
     }
 
     #[test]
