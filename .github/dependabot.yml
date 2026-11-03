@@ -1,4 +1,4 @@
-# Weekly update pull requests, for information. Two ecosystems:
+# Weekly update pull requests, for information only. Two ecosystems:
 #
 #  - cargo: the Rust crates. These are grouped into one PR. Treat them as a
 #    heads-up, not an auto-merge: the three direct crates (libadwaita, gtk4,
