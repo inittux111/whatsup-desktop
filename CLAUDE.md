@@ -63,10 +63,10 @@ The app must follow the active system theme, whatever it is. Themes commonly do 
 
 ## Development container
 
-All building and development happens in a container: never install build tools or `-devel` packages on the host. Use a dedicated toolbox, `whatsup-desktop`, on Fedora 44 like the host, so RPMs built in it match the host's libraries. Inside it, anything development needs is allowed without asking, including installing and removing packages. Leave the user's other toolboxes (`ba`, `fc44`) alone.
+All building and development happens in a container: never install build tools or `-devel` packages on the host. Use a dedicated toolbox, `whatsup-desktop`, on Fedora 45 like the host, so RPMs built in it match the host's libraries. Inside it, anything development needs is allowed without asking, including installing and removing packages. Leave the user's other toolboxes (`ba`, `fc44`) alone.
 
 ```sh
-toolbox create whatsup-desktop --image registry.fedoraproject.org/fedora-toolbox:44   # if it doesn't exist
+toolbox create whatsup-desktop --image registry.fedoraproject.org/fedora-toolbox:45   # if it doesn't exist
 toolbox run -c whatsup-desktop sudo dnf install -y cargo clippy rustfmt libadwaita-devel \
     webkitgtk6.0-devel blueprint-compiler rpm-build google-noto-color-emoji-fonts \
     desktop-file-utils libappstream-glib make hunspell-en-US

@@ -54,7 +54,7 @@ whatsup-desktop officially supports Fedora 43 and newer (which ship libadwaita
 sudo dnf install ./target/rpm/RPMS/x86_64/whatsup-desktop-*.rpm
 ```
 
-The RPM provided on the [releases](https://github.com/inittux111/whatsup-desktop/releases/latest) page is only supported for Fedora 44. My
+The RPM provided on the [releases](https://github.com/inittux111/whatsup-desktop/releases/latest) page is only supported for Fedora 45. My
 personal [COPR repo](https://copr.fedorainfracloud.org/coprs/inittux0101/pkgs-upstream-latest)
 provides builds for other recent Fedora versions.
 
@@ -155,7 +155,7 @@ Builds run in a container, so no build tools end up on your system.
 In a Fedora toolbox, which also runs the app on your desktop while developing:
 
 ```sh
-toolbox create whatsup-desktop --image registry.fedoraproject.org/fedora-toolbox:44
+toolbox create whatsup-desktop --image registry.fedoraproject.org/fedora-toolbox:45
 toolbox run -c whatsup-desktop sudo dnf install -y cargo clippy rustfmt libadwaita-devel \
     webkitgtk6.0-devel rpm-build google-noto-color-emoji-fonts \
     desktop-file-utils libappstream-glib make hunspell-en-US

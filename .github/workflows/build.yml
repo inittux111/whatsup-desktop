@@ -1,4 +1,4 @@
-# Builds and checks WhatsUp on Fedora 44, the primary target, on every push to
+# Builds and checks WhatsUp on Fedora 45, the primary target, on every push to
 # master and every pull request, using the same libraries as the development
 # toolbox, and builds the Debian stable package the way a release does.
 # Running in Fedora and Debian containers (not the Ubuntu runner) is
@@ -33,7 +33,7 @@ permissions:
 jobs:
   lint:
     runs-on: ubuntu-latest
-    container: fedora:44
+    container: fedora:45
     steps:
       # git first: the base Fedora image has none, and checkout needs it.
       - name: Install build dependencies
@@ -58,7 +58,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    container: fedora:44
+    container: fedora:45
     steps:
       - name: Install build dependencies
         run: |

@@ -3,7 +3,7 @@
 #  - cargo: the Rust crates. These are grouped into one PR. Treat them as a
 #    heads-up, not an auto-merge: the three direct crates (libadwaita, gtk4,
 #    webkit6) are tied to the GNOME libraries Fedora ships, so a bump can need
-#    newer system libraries than Fedora 44 has. Review each against Fedora's
+#    newer system libraries than Fedora 45 has. Review each against Fedora's
 #    versions before merging.
 #  - github-actions: the actions used in the workflows, which are pinned to
 #    exact commits. This proposes the new commit when an action releases, so
