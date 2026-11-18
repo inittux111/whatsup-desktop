@@ -129,6 +129,33 @@ pub fn build(dirs: &AccountDirs, extras: Extras) -> webkit::WebView {
     view
 }
 
+/// Leaves WhatsApp Web for an empty page, as closing a browser tab does: the
+/// page runs its unload handlers and WebKit completes the database work it
+/// started. Calls `done` once the empty page has loaded (or failed to).
+pub fn unload(view: &webkit::WebView, done: impl FnOnce() + 'static) {
+    let done = Rc::new(Cell::new(Some(done)));
+    let finish = move || {
+        if let Some(done) = done.take() {
+            done();
+        }
+    };
+    let on_load = finish.clone();
+    view.connect_load_changed(move |view, event| {
+        if event == webkit::LoadEvent::Finished && view.uri().as_deref() == Some(BLANK_URL) {
+            on_load();
+        }
+    });
+    view.connect_load_failed(move |_, _, uri, _| {
+        if uri == BLANK_URL {
+            finish();
+        }
+        false
+    });
+    view.load_uri(BLANK_URL);
+}
+
+const BLANK_URL: &str = "about:blank";
+
 /// Loads the stylesheets and scripts again and reloads the page, so changes
 /// to them show.
 pub fn reload_customizations(view: &webkit::WebView, extras: Extras) {

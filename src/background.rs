@@ -14,8 +14,7 @@ pub fn attach(app: &adw::Application, main: &Main) {
     let settings = main.settings.clone();
     window.connect_close_request(move |window| {
         if !settings.get().run_in_background {
-            // The app quits with its window; a background save wouldn't finish.
-            settings.save_now();
+            // The app quits with its window; `app::shutdown` saves.
             return glib::Propagation::Proceed;
         }
         window.set_visible(false);

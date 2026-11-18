@@ -5,6 +5,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use std::time::Duration;
 
 use gtk::glib;
 use webkit::prelude::*;
@@ -263,6 +264,50 @@ impl Accounts {
         let hooks = self.0.hooks.borrow().clone();
         for hook in hooks {
             hook(&session);
+        }
+    }
+
+    /// Closes every page as a browser closes a tab, so WhatsApp Web isn't cut
+    /// off halfway through saving when WhatsUp quits. Waits until they're
+    /// closed, or for at most `limit`.
+    pub fn unload_all(&self, limit: Duration) {
+        let sessions = self.sessions();
+        if sessions.is_empty() {
+            return;
+        }
+        let main_loop = glib::MainLoop::new(None, false);
+        let pending = Rc::new(Cell::new(sessions.len()));
+        for session in &sessions {
+            let pending = pending.clone();
+            let main_loop = main_loop.clone();
+            web::unload(&session.view, move || {
+                pending.set(pending.get() - 1);
+                if pending.get() == 0 {
+                    main_loop.quit();
+                }
+            });
+        }
+        let timed_out = Rc::new(Cell::new(false));
+        let timeout = glib::timeout_add_local_once(
+            limit,
+            glib::clone!(
+                #[strong]
+                main_loop,
+                #[strong]
+                timed_out,
+                move || {
+                    timed_out.set(true);
+                    main_loop.quit();
+                }
+            ),
+        );
+        let started = std::time::Instant::now();
+        main_loop.run();
+        if timed_out.get() {
+            glib::g_warning!("whatsup-desktop", "pages didn't close within {limit:?}");
+        } else {
+            timeout.remove();
+            glib::g_debug!("whatsup-desktop", "pages closed in {:?}", started.elapsed());
         }
     }
 

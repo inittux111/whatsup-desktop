@@ -10,6 +10,7 @@ mod downloads;
 mod notifications;
 mod paths;
 mod preferences;
+mod session;
 mod settings;
 mod shortcuts;
 mod theme;

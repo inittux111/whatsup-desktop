@@ -1,15 +1,21 @@
 //! The application: one instance per session, one main window.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::time::Duration;
 
 use adw::prelude::*;
 use gtk::{gio, glib};
 
+use crate::accounts::Accounts;
 use crate::settings::{self, Settings};
-use crate::{background, clipboard, downloads, notifications, paths, window};
+use crate::{background, clipboard, downloads, notifications, paths, session, window};
 
 pub const APP_ID: &str = "app.whatsup_desktop.WhatsUp";
 pub const APP_NAME: &str = "WhatsUp";
+
+/// How long quitting waits for the pages to close; well inside the 10 s a
+/// session manager gives apps as the session ends.
+const UNLOAD_LIMIT: Duration = Duration::from_secs(4);
 
 pub fn run() -> glib::ExitCode {
     glib::set_application_name(APP_NAME);
@@ -32,11 +38,15 @@ pub fn run() -> glib::ExitCode {
         }
         std::ops::ControlFlow::Continue(())
     });
-    app.connect_startup(|_| add_dev_icons());
+    app.connect_startup(|app| {
+        add_dev_icons();
+        session::register(app);
+    });
     app.connect_activate(activate);
+    app.connect_shutdown(shutdown);
 
     let quit = gio::ActionEntry::builder("quit")
-        .activate(|app: &adw::Application, _, _| quit(app))
+        .activate(|app: &adw::Application, _, _| app.quit())
         .build();
     app.add_action_entries([quit]);
 
@@ -47,8 +57,9 @@ thread_local! {
     /// Started with `--background`, as starting at login does: the first
     /// window stays hidden in the tray.
     static START_HIDDEN: Cell<bool> = const { Cell::new(false) };
-    /// The main window's settings, for saving them as the app quits.
-    static MAIN_SETTINGS: std::cell::RefCell<Option<Settings>> = const { std::cell::RefCell::new(None) };
+    /// What quitting needs from the main window: its size and settings to
+    /// save, and the pages to close.
+    static MAIN: RefCell<Option<Quitting>> = const { RefCell::new(None) };
 }
 
 /// Shows the existing window, or builds it on first launch.
@@ -58,7 +69,13 @@ fn activate(app: &adw::Application) {
         return;
     }
     let main = window::build(app, Settings::load());
-    MAIN_SETTINGS.with(|s| s.replace(Some(main.settings.clone())));
+    MAIN.with(|m| {
+        m.replace(Some(Quitting {
+            window: main.window.clone(),
+            settings: main.settings.clone(),
+            accounts: main.accounts.clone(),
+        }))
+    });
     background::attach(app, &main);
     notifications::attach(app, &main);
     downloads::attach(&main);
@@ -68,17 +85,24 @@ fn activate(app: &adw::Application) {
     }
 }
 
-/// Quits, after saving the window's size; the settings are written right
-/// away, as a background save wouldn't finish.
-fn quit(app: &adw::Application) {
-    if let Some(window) = app.active_window().and_downcast::<adw::ApplicationWindow>() {
-        let settings = MAIN_SETTINGS.with(|s| s.borrow().clone());
-        if let Some(settings) = settings {
-            window::remember_size(&window, &settings);
-            settings.save_now();
-        }
+struct Quitting {
+    window: adw::ApplicationWindow,
+    settings: Settings,
+    accounts: Accounts,
+}
+
+/// Runs last on every way of quitting (Quit, closing the window without
+/// Run in Background, the session ending): saves the window's size and the
+/// settings right away, as a background save wouldn't finish, then closes
+/// the pages so WhatsApp Web finishes saving before WebKit's processes stop.
+fn shutdown(_app: &adw::Application) {
+    if let Some(main) = MAIN.with(|m| m.take()) {
+        window::remember_size(&main.window, &main.settings);
+        main.settings.save_now();
+        main.window.set_visible(false);
+        main.accounts.unload_all(UNLOAD_LIMIT);
     }
-    app.quit();
+    session::finish();
 }
 
 /// In development builds, finds the app's icons in the source tree.
