@@ -5,10 +5,15 @@
 //! at once, which can cut WhatsApp Web off halfway through saving and leave
 //! it signed out on the next start.
 //!
+//! Closing the pages isn't enough on its own: systemd stops WebKit's network
+//! process the moment WhatsUp answers, so WhatsUp waits until WebKit has
+//! committed what the pages wrote (`STORAGE_COMMIT_WAIT`).
+//!
 //! GTK passes on the session's end only through the desktop portal, which
 //! doesn't wait for the app to finish (and isn't told at all on MATE).
 
 use std::cell::RefCell;
+use std::time::Duration;
 
 use adw::prelude::*;
 use gtk::{gio, glib};
@@ -18,6 +23,15 @@ const MANAGER_PATH: &str = "/org/gnome/SessionManager";
 const CLIENT: &str = "org.gnome.SessionManager.ClientPrivate";
 /// How long quitting waits for the session manager to take the answer.
 const ANSWER_TIMEOUT_MS: i32 = 1000;
+/// How long WhatsUp waits, once its pages are closed, before telling the
+/// session manager it's done. WebKit's network process keeps localStorage
+/// writes in an open SQLite transaction for 500 ms before committing them
+/// (`SQLiteStorageArea`'s `transactionDuration`), and it's stopped together
+/// with WhatsUp, so answering sooner loses the last writes. WhatsApp Web keeps
+/// its login keys there (and the key for its encrypted IndexedDB), so losing
+/// them leaves it signed out. A normal quit doesn't need this: the network
+/// process commits everything when WhatsUp's connection to it closes.
+const STORAGE_COMMIT_WAIT: Duration = Duration::from_millis(1200);
 
 /// What a signal from the session manager asks WhatsUp to do.
 #[derive(Debug, PartialEq, Eq)]
@@ -125,8 +139,28 @@ fn handle(app: &adw::Application, signal: &str) {
 /// waiting for it. Runs last as WhatsUp quits, after the pages are closed.
 pub fn finish() {
     if CLIENT_STATE.with(|client| client.borrow().owes_answer) {
+        wait(STORAGE_COMMIT_WAIT);
+        // Logged before answering: the session stops WhatsUp right after.
+        glib::g_message!(
+            "whatsup-desktop",
+            "the session is ending; everything is saved"
+        );
         answer(true);
     }
+}
+
+/// Keeps the main loop running for `duration`.
+fn wait(duration: Duration) {
+    let main_loop = glib::MainLoop::new(None, false);
+    glib::timeout_add_local_once(
+        duration,
+        glib::clone!(
+            #[strong]
+            main_loop,
+            move || main_loop.quit()
+        ),
+    );
+    main_loop.run();
 }
 
 /// Answers that WhatsUp may quit, or (`blocking`, as it quits) that it's
