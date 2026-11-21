@@ -2,7 +2,7 @@
 %global debug_package %{nil}
 
 Name:           whatsup-desktop
-Version:        1.3.2
+Version:        1.3.3
 Release:        1%{?dist}
 Summary:        WhatsApp Web for GNOME
 License:        GPL-3.0-or-later
@@ -63,6 +63,10 @@ make install DESTDIR=%{buildroot} PREFIX=%{_prefix}
 %{_datadir}/icons/hicolor/scalable/apps/app.whatsup_desktop.WhatsUp-tray-unread.svg
 
 %changelog
+* Sat Nov 21 2026 Maarten van der Rijst <claude@feedmebits.nl> - 1.3.3-1
+- Give WebKit time to save WhatsApp's data when logging out or shutting
+  down, so WhatsApp no longer asks to link the device again afterwards
+
 * Wed Nov 18 2026 Maarten van der Rijst <claude@feedmebits.nl> - 1.3.2-1
 - Quit cleanly when logging out or shutting down, so WhatsApp no longer
   sometimes asks to link the device again afterwards
